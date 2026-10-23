@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Tekken — Native Linux
+Comment=Launch Tekken 6 and Tekken Tag Tournament 2
+Exec=tekken_launcher
+Icon=applications-games
+Terminal=false
+Categories=Game;

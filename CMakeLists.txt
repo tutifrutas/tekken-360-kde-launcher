@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.25)
+project(tekken_launcher VERSION 0.1.0 LANGUAGES CXX)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "This launcher targets native Linux")
+endif()
+include(CTest)
+add_subdirectory(launcher)
