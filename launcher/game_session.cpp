@@ -2,8 +2,23 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QProcessEnvironment>
+#include <cerrno>
+#include <sys/resource.h>
 
 GameSession::GameSession(LaunchSettings& settings, QObject* parent) : QObject(parent), settings_(settings) {
+    // Desktop sessions often start with a 1024-FD soft limit. NTSYNC needs
+    // descriptors for guest synchronization objects; use the permitted hard
+    // limit in the game child only, without changing the launcher's limit.
+    process_.setChildProcessModifier([this] {
+        struct rlimit limit{};
+        if (getrlimit(RLIMIT_NOFILE, &limit) != 0)
+            process_.failChildProcessModifier("getrlimit(RLIMIT_NOFILE)", errno);
+        if (limit.rlim_cur < limit.rlim_max) {
+            limit.rlim_cur = limit.rlim_max;
+            if (setrlimit(RLIMIT_NOFILE, &limit) != 0)
+                process_.failChildProcessModifier("setrlimit(RLIMIT_NOFILE)", errno);
+        }
+    });
     connect(this, &GameSession::changed, &settings_, [this] { settings_.setGameRunning(running()); });
     killTimer_.setSingleShot(true);
     connect(&killTimer_, &QTimer::timeout, &process_, &QProcess::kill);

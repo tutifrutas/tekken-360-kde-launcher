@@ -37,7 +37,9 @@ instructions to build and prepare that folder.
 Game cards support Tab, Space, Enter and Left/Right. Selecting a card does not
 launch a game. Settings are separate for each game; installation locations are
 not guessed. The launcher preserves saves, caches and logs. It asks before
-stopping a running game when closing the window.
+stopping a running game when closing the window. Each game child uses its
+permitted hard open-file limit for NTSYNC; the launcher and system-wide limits
+are unchanged.
 
 Both games use Wayland and the Vulkan FSI/ROV renderer. TTT2 uses full resolve
 readback. Rendering controls apply independently to each game.

@@ -4,6 +4,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QSignalSpy>
+#include <sys/resource.h>
 
 class LauncherTest final : public QObject {
     Q_OBJECT
@@ -101,6 +102,44 @@ private slots:
         QVERIFY(bytes.contains("--user_data_root=" + directory.path().toUtf8() + "/user\n"));
         game.stop(); QTRY_VERIFY_WITH_TIMEOUT(!game.running(), 5000);
         QVERIFY(settings.selectGame("tekken6"));
+    }
+    void childDescriptorLimit_data() {
+        QTest::addColumn<QString>("gameId");
+        QTest::newRow("tekken6") << QString("tekken6");
+        QTest::newRow("ttt2") << QString("ttt2");
+    }
+    void childDescriptorLimit() {
+        QFETCH(QString, gameId);
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        LaunchSettings settings(directory.path() + "/settings.ini");
+        QVERIFY(settings.selectGame(gameId));
+        QVERIFY(settings.setValue("root", directory.path()));
+        QFile script(directory.path() + '/' + gameId);
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("#!/bin/sh\nulimit -Sn > fd-limit.txt\nexec sleep 30\n");
+        script.close();
+        QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        GameSession game(settings);
+        struct rlimit original{};
+        QCOMPARE(getrlimit(RLIMIT_NOFILE, &original), 0);
+        if (original.rlim_max <= 1024) QSKIP("Hard descriptor limit is too low to exercise desktop inheritance");
+        auto desktop = original;
+        desktop.rlim_cur = 1024;
+        QCOMPARE(setrlimit(RLIMIT_NOFILE, &desktop), 0);
+        const bool started = game.start();
+        struct rlimit parentAfterStart{};
+        const int inspected = getrlimit(RLIMIT_NOFILE, &parentAfterStart);
+        const int restored = setrlimit(RLIMIT_NOFILE, &original);
+        QCOMPARE(restored, 0); QCOMPARE(inspected, 0);
+        QCOMPARE(parentAfterStart.rlim_cur, desktop.rlim_cur);
+        QVERIFY(started);
+        QFile limit(directory.path() + "/fd-limit.txt");
+        QTRY_VERIFY_WITH_TIMEOUT(limit.exists() && limit.size() > 0, 3000);
+        QVERIFY(limit.open(QIODevice::ReadOnly));
+        const QByteArray expected = original.rlim_max == RLIM_INFINITY
+            ? QByteArray("unlimited") : QByteArray::number(qulonglong(original.rlim_max));
+        QCOMPARE(limit.readAll().trimmed(), expected);
+        game.stop(); QTRY_VERIFY_WITH_TIMEOUT(!game.running(), 5000);
     }
     void processLifecycle() {
         QTemporaryDir directory; QVERIFY(directory.isValid());
